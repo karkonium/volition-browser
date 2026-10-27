@@ -1,0 +1,35 @@
+/* Native content simply ends. No extension panels or replacement pages. */
+[data-still-yt-overflow], [data-still-yt-continuation], [data-still-yt-empty-row] {
+  display:none!important;
+}
+[data-still-yt-short-overflow] {visibility:hidden!important;pointer-events:none!important}
+
+/* Remove in-player routes into another video; native playback controls stay. */
+#movie_player .ytp-next-button,
+#movie_player .ytp-prev-button,
+#movie_player .ytp-ce-element,
+#movie_player .ytp-endscreen-content,
+#movie_player .ytp-videowall-still,
+#movie_player .ytp-autonav-endscreen-upnext-container,
+#movie_player .ytp-cards-button,
+#movie_player .ytp-cards-teaser,
+#movie_player .ytp-cards {display:none!important;pointer-events:none!important}
+
+/* Keep the native theatre initializer available to the content script, but hide its UI toggle. */
+#movie_player .ytp-size-button {display:none!important;pointer-events:none!important}
+
+/* Shorts stay available in Search as ordinary watch-page links. */
+ytd-guide-entry-renderer:has(a[href*="/shorts"]),
+ytd-mini-guide-entry-renderer:has(a[href*="/shorts"]),
+[data-still-yt-shorts-hidden] {display:none!important}
+/* Fail closed before the first scan, without touching the player/comments. */
+html:not([data-still-yt-recommendations="open"]) ytd-browse[page-subtype="home"],
+html:not([data-still-yt-recommendations="open"]) [data-still-yt-home],
+html:not([data-still-yt-recommendations="open"]) ytd-watch-flexy #related {display:none!important}
+
+html[data-still-yt-surface="home"]:not([data-still-yt-recommendations="open"]) ytd-browse {display:none!important}
+ytd-browse[page-subtype="home"] ytd-rich-section-renderer:has(a[href*="/shorts/"]),
+ytd-browse[page-subtype="home"] ytd-rich-shelf-renderer[is-shorts],
+ytd-watch-flexy #related ytd-reel-shelf-renderer,
+ytd-watch-flexy #related ytm-shorts-lockup-view-model,
+ytd-watch-flexy #related yt-shorts-lockup-view-model {display:none!important}

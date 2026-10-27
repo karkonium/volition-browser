@@ -1,0 +1,17 @@
+/* These rules start before Instagram renders. Access is fail-closed until local state arrives. */
+html:not([data-still-reels="open"]) a[href="/reels/"],
+html:not([data-still-reels="open"]) a[href="/reels"],
+html:not([data-still-explore="open"]) a[href^="/explore"],
+html:not([data-still-explore="open"]) a[href^="/search"],
+html:not([data-still-explore="open"]) a:has(svg[aria-label="Search"]),
+html:not([data-still-explore="open"]) [role="button"]:has(svg[aria-label="Search"]),
+html:not([data-still-explore="open"]) button:has(svg[aria-label="Search"]){display:none!important}
+/* Locked views retain Instagram's shell; no extension screen, backdrop, or message. */
+html[data-still-quiet] main,html[data-still-quiet] [role="main"],
+html[data-still-quiet] [data-still-quiet-content],
+html[data-still-quiet] article,html[data-still-quiet] video,
+html[data-still-quiet="stories"] [role="dialog"] {visibility:hidden!important;pointer-events:none!important}
+[data-still-over-limit]{display:none!important}
+[data-still-checking]{visibility:hidden!important}
+[data-still-carousel-blocked]{visibility:hidden!important;pointer-events:none!important}
+[data-still-no-horizontal],[data-still-no-down]{display:none!important}

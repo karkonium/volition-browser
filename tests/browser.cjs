@@ -1,0 +1,154 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const Core=require('../extension/core.js');
+const nav='<nav><a href="/">Home</a><a href="/reels/">Reels</a><a href="/explore/">Search</a><a href="/person/followers/">Followers</a><a href="/person/following/">Following</a></nav>';
+function fixture(url){
+ const base='<style>body{margin:0}nav{height:40px}article{display:block}</style>'+nav;
+ if(url.pathname.startsWith('/reels/')||/^\/[^/]+\/reel\/[^/]+/.test(url.pathname))return base+'<main id="viewer" style="height:600px;width:400px;overflow:auto">'+Array.from({length:15},(_,i)=>`<section style="height:600px"><a href="/reel/R${i}/">Reel</a><video style="display:block;width:400px;height:560px"></video></section>`).join('')+'</main><button id="up" aria-label="Navigate to previous Reel">Up</button><button id="down" aria-label="Navigate to next Reel">Down</button><script>let n=0;function move(d){n=Math.max(0,n+d);history.pushState({},"","/reels/R"+n+"/");document.querySelector("#viewer").scrollTop=n*600}document.getElementById("down").onclick=()=>move(1);document.getElementById("up").onclick=()=>move(-1);</script>';
+ if(url.pathname==='/explore/')return base+'<main>'+Array.from({length:12},(_,i)=>`<a style="display:block;height:150px" href="/p/E${i}/">Result ${i}</a>`).join('')+'<div role="progressbar">Loading</div></main>';
+ if(/followers|following/.test(url.pathname))return base+'<main>Profile</main><div role="dialog" style="position:fixed;inset:100px"><h1>Followers</h1><input placeholder="Search"><div id="people" style="height:350px;overflow:auto">'+Array.from({length:50},(_,i)=>`<a style="display:block;height:50px" href="/friend${i}/">Person ${i}</a>`).join('')+'</div><button id="person">Open profile</button></div>';
+ if(url.pathname.startsWith('/p/'))return base+'<div role="dialog"><article><a href="'+url.pathname+'">Photo</a><div style="position:relative;width:400px;height:400px;overflow:hidden"><ul style="display:flex;list-style:none;padding:0;margin:0">'+Array.from({length:10},(_,i)=>`<li style="flex:0 0 400px"><img style="width:400px;height:400px" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="></li>`).join('')+'</ul><button id="inner" style="position:absolute;right:10px;top:150px" aria-label="Next">Next photo</button><button id="previous" style="position:absolute;left:10px;top:150px" aria-label="Go back">Previous photo</button><span id="slide">1</span></div><button id="outer" aria-label="Next"><svg aria-label="Next"></svg></button><a id="outer-previous" role="button" aria-label="Previous">Previous</a></article></div><script>let n=1;document.querySelector("#inner").onclick=()=>document.querySelector("#slide").textContent=++n;document.querySelector("#previous").onclick=()=>document.querySelector("#slide").textContent=--n;document.querySelector("#outer").onclick=()=>window.outerAdvanced=true;</script>';
+ return base+'<main>'+Array.from({length:25},(_,i)=>`<article style="height:250px"><a href="/p/H${i}/">Home post</a></article>`).join('')+'</main>';
+}
+(async()=>{
+ const profile=fs.mkdtempSync(path.join(os.tmpdir(),'still-instagram-'));
+ const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${path.resolve(__dirname,'../extension')}`,`--load-extension=${path.resolve(__dirname,'../extension')}`],viewport:{width:1280,height:820}});
+ let checks=0;const pass=x=>{checks++;console.log('PASS: '+x)};const errors=[];context.on('weberror',e=>errors.push(e.error().message));
+ try{
+  await context.route('https://www.instagram.com/**',r=>r.fulfill({contentType:'text/html',body:fixture(new URL(r.request().url()))}));
+  const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
+  const get=()=>worker.evaluate(async()=>(await chrome.storage.local.get('still')).still);
+  const set=s=>worker.evaluate(async s=>chrome.storage.local.set({still:s}),s);
+  const page=await context.newPage(),popup=await context.newPage();await popup.setViewportSize({width:408,height:850});
+  const openPopup=()=>popup.goto(`chrome-extension://${id}/popup.html`);
+  await openPopup();await popup.waitForFunction(()=>document.querySelector('#more-detail').textContent.includes('Finish'));
+  assert.equal(await popup.locator('#instagram-panel button').count(),4);assert.equal(await popup.locator('#more-reels').isEnabled(),false);pass('Instagram popup has three feed controls plus the login toggle and no direct reset bypass');
+  await page.goto('https://www.instagram.com/');await page.waitForFunction(()=>document.querySelectorAll('[data-still-over-limit]').length===15);
+  assert.equal(await page.locator('nav a[href="/reels/"]').isVisible(),false);assert.equal(await page.locator('nav a[href="/explore/"]').isVisible(),false);
+  await popup.locator('#show-reels').click();await popup.locator('#show-search').click();
+  await page.waitForFunction(()=>document.documentElement.dataset.stillReels==='open'&&document.documentElement.dataset.stillExplore==='open');
+  assert.equal(await page.locator('nav a[href="/reels/"]').isVisible(),true);assert.equal(await page.locator('nav a[href="/explore/"]').isVisible(),true);pass('Show controls reveal only their navigation buttons');
+  let s=await get();s.reveals={reels:Date.now()-1,explore:Date.now()-1};await set(s);
+  await page.waitForFunction(()=>document.documentElement.dataset.stillReels==='closed');assert.equal(await page.locator('main').isVisible(),true);assert.equal(await page.locator('html[data-still-quiet]').count(),0);pass('expired navigation reveals leave Home and its ten-post batch available');
+  for(const name of ['followers','following']){
+   await page.goto(`https://www.instagram.com/person/${name}/`);await page.waitForTimeout(250);
+   assert.equal(await page.locator('[role="dialog"]').isVisible(),true);await page.locator('input').fill('friend');
+   await page.locator('#people').evaluate(n=>n.scrollTop=1500);await page.waitForTimeout(200);
+   assert.equal(await page.locator('#people').evaluate(n=>n.scrollTop),1500);assert.equal(await page.locator('html[data-still-quiet]').count(),0);
+  }pass('follower and following search dialogs remain visible, editable, and scrollable');
+  await page.goto('https://www.instagram.com/person/reels/');
+  await page.evaluate(()=>{
+   const modal=document.createElement('div');modal.id='profile-viewer';modal.setAttribute('role','dialog');modal.style='position:fixed;inset:0;background:white;z-index:10';
+   modal.innerHTML='<article style="position:relative;width:400px;height:450px"><a href="/reel/PROFILE0/">Profile Reel</a><video style="display:block;width:400px;height:400px"></video><button id="profile-next" style="position:absolute;right:0;top:150px" aria-label="Next">Next</button><button id="profile-prev" style="position:absolute;left:0;top:150px" aria-label="Go back">Previous</button><input id="profile-comment" value="abc"></article>';
+   document.body.append(modal);window.profileMoves=0;
+   document.querySelector('#profile-next').onclick=()=>window.profileMoves++;
+   document.querySelector('#profile-prev').onclick=()=>window.profileMoves++;
+   window.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight'].includes(event.key)&&!event.target.matches('input'))window.profileMoves++});
+  });
+  await page.waitForFunction(()=>document.querySelector('#profile-next').hasAttribute('data-still-no-horizontal'));
+  assert.equal(await page.locator('#profile-next').isVisible(),false);assert.equal(await page.locator('#profile-prev').isVisible(),false);
+  await page.keyboard.press('ArrowLeft');await page.keyboard.press('ArrowRight');
+  await page.locator('#profile-next').evaluate(n=>n.click());await page.locator('#profile-prev').evaluate(n=>n.click());
+  assert.equal(await page.evaluate(()=>window.profileMoves),0);assert.equal(page.url(),'https://www.instagram.com/person/reels/');
+  await page.locator('#profile-comment').focus();await page.locator('#profile-comment').evaluate(n=>n.setSelectionRange(3,3));await page.locator('#profile-comment').press('ArrowLeft');assert.equal(await page.locator('#profile-comment').evaluate(n=>n.selectionStart),2);
+  await page.locator('#profile-viewer').evaluate(n=>n.remove());await page.waitForTimeout(200);
+  pass('profile-opened Reel dialogs block side buttons and Left/Right even while the profile URL remains unchanged');
+  await page.goto('https://www.instagram.com/person/reel/PROFILE1/');
+  await page.evaluate(()=>{
+   const next=document.createElement('button');next.id='nested-next';next.setAttribute('aria-label','Next');next.style='position:fixed;left:350px;top:150px';next.textContent='Next post';next.onclick=()=>history.pushState({},'', '/person/reel/WRONG/');document.querySelector('main').append(next);
+   window.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight'].includes(event.key))history.pushState({},'', '/person/reel/WRONG/')});
+  });
+  await page.waitForFunction(()=>document.querySelector('#nested-next').hasAttribute('data-still-no-horizontal'));
+  assert.equal(await page.locator('#nested-next').isVisible(),false);await page.locator('#nested-next').evaluate(n=>n.click());
+  await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowLeft');
+  assert.equal(page.url(),'https://www.instagram.com/person/reel/PROFILE1/');
+  pass('username-prefixed Reel URLs block horizontal navigation even without a dialog wrapper');
+  await page.goto('https://www.instagram.com/stories/person/123/');
+  await page.evaluate(()=>{
+    const story=document.createElement('div');story.setAttribute('role','dialog');story.style='position:fixed;inset:0;background:white';story.innerHTML='<video style="display:block;width:400px;height:400px"></video><button id="story-next" aria-label="Next">Next story</button>';document.body.append(story);
+    window.storyMoves=0;window.addEventListener('keydown',event=>{if(event.key==='ArrowRight')window.storyMoves++});
+  });
+  await page.waitForTimeout(250);assert.equal(await page.locator('[data-still-ui="status"]').count(),0);assert.equal(await page.locator('#story-next').isVisible(),true);
+  await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>window.storyMoves),1);
+  pass('Story video dialogs keep native navigation and are not mistaken for profile Reel viewers');
+  await page.goto('https://www.instagram.com/p/PHOTO/');await page.waitForTimeout(250);
+  assert.equal(await page.locator('#inner').isVisible(),true);assert.equal(await page.locator('#outer').isVisible(),false);assert.equal(await page.locator('#outer-previous').isVisible(),false);
+  await page.locator('#inner').click();assert.equal(await page.locator('#slide').textContent(),'2');await page.locator('#previous').click();assert.equal(await page.locator('#slide').textContent(),'1');
+  await page.evaluate(()=>{
+   document.activeElement?.blur();
+   window.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight'].includes(event.key)&&!event.target.matches('input'))history.pushState({},'', '/p/WRONG_POST/')});
+   const input=document.createElement('input');input.id='comment';input.value='abc';document.querySelector('article').append(input);
+  });
+  await page.keyboard.press('ArrowRight');assert.equal(page.url(),'https://www.instagram.com/p/PHOTO/');assert.equal(await page.locator('#slide').textContent(),'2');
+  await page.keyboard.press('ArrowLeft');assert.equal(page.url(),'https://www.instagram.com/p/PHOTO/');assert.equal(await page.locator('#slide').textContent(),'1');
+  await page.locator('#comment').focus();await page.locator('#comment').press('End');await page.locator('#comment').press('ArrowLeft');
+  assert.equal(await page.locator('#comment').evaluate(n=>n.selectionStart),2);
+  pass('keyboard Left/Right stays within the current photo carousel and leaves comment cursor movement usable');
+  await page.locator('#outer').evaluate(n=>n.click());assert.equal(await page.evaluate(()=>!!window.outerAdvanced),false);pass('inner photo carousel works while outer next-post navigation stays hidden');
+  await page.goto('https://www.instagram.com/explore/');await page.waitForFunction(()=>document.querySelectorAll('main a:not([data-still-over-limit])').length===12);
+  await page.evaluate(()=>scrollTo(0,600));await page.waitForTimeout(250);assert.equal(await page.evaluate(()=>scrollY),600);
+  await page.evaluate(()=>{const a=document.createElement('a');a.href='/p/LATE/';a.textContent='Late result';document.querySelector('main').append(a)});
+  await page.waitForFunction(()=>document.querySelector('a[href="/p/LATE/"]').hasAttribute('data-still-over-limit'));
+  assert.equal(page.url(),'https://www.instagram.com/explore/');assert.equal(await page.locator('html[data-still-limit]').count(),0);pass('Search freezes the first twelve loaded tiles and rejects later additions even below the old thirty-six limit');
+  await page.locator('a[href="/p/E0/"]').click();await page.waitForURL('**/p/E0/');await page.waitForTimeout(250);
+  await page.evaluate(()=>{
+   const comments=document.createElement('div');comments.id='comments';comments.style='position:fixed;right:10px;top:100px;width:250px;height:250px;overflow:auto';comments.innerHTML='<div style="height:2000px">Comments</div>';document.body.append(comments);
+   window.addEventListener('wheel',event=>{if(!event.target.closest('#comments'))history.pushState({},'', '/p/UNWANTED/')});
+   window.addEventListener('keydown',event=>{if(['ArrowDown','PageDown',' '].includes(event.key)&&!event.target.closest('#comments'))history.pushState({},'', '/p/UNWANTED/')});
+  });
+  await page.mouse.move(200,200);await page.mouse.wheel(0,1800);await page.keyboard.press('ArrowDown');await page.keyboard.press('PageDown');
+  await page.waitForTimeout(200);assert.equal(page.url(),'https://www.instagram.com/p/E0/');
+  await page.locator('#inner').click();assert.equal(await page.locator('#slide').textContent(),'2');
+  const box=await page.locator('#comments').boundingBox();await page.mouse.move(box.x+80,box.y+80);await page.mouse.wheel(0,500);await page.waitForTimeout(200);
+  assert.ok(await page.locator('#comments').evaluate(n=>n.scrollTop)>0);assert.equal(page.url(),'https://www.instagram.com/p/E0/');
+  await page.reload({waitUntil:"domcontentloaded"});await page.waitForTimeout(250);
+  const blocked=await page.evaluate(()=>{const e=new WheelEvent('wheel',{deltaY:1200,bubbles:true,cancelable:true});document.querySelector('article').dispatchEvent(e);return e.defaultPrevented});assert.equal(blocked,true);
+  pass('a Search-opened post blocks wheel and keyboard feed switching, preserves comments/carousel, and stays pinned after refresh');
+  await page.goBack();await page.waitForURL('**/explore/');await page.waitForTimeout(250);
+  await page.evaluate(()=>{const a=document.createElement('a');a.href='/p/AFTER_BACK/';a.textContent='Extra';document.querySelector('main').append(a)});
+  await page.waitForFunction(()=>document.querySelector('a[href="/p/AFTER_BACK/"]').hasAttribute('data-still-over-limit'));
+  assert.equal(await page.locator('main a:not([data-still-over-limit])').count(),12);
+  pass('returning from a post preserves the original Search snapshot');
+  await page.locator('a[href="/p/E1/"]').evaluate(n=>n.href='/reels/E1/');
+  await page.locator('a[href="/reels/E1/"]').click();await page.waitForURL('**/reels/E1/');await page.waitForTimeout(250);
+  assert.equal(await page.locator('[aria-label="Navigate to next Reel"]').isVisible(),false);
+  assert.equal(await page.locator('[aria-label="Navigate to previous Reel"]').isVisible(),false);
+  await page.mouse.move(200,200);await page.mouse.wheel(0,1800);await page.keyboard.press('ArrowDown');
+  await page.locator('#down').evaluate(n=>n.click());await page.waitForTimeout(200);
+  assert.equal(page.url(),'https://www.instagram.com/reels/E1/');assert.equal(await page.locator('#viewer').evaluate(n=>n.scrollTop),0);
+  pass('a Search result opened in the Reel viewer cannot start its vertical infinite feed');
+  // Leave the previous viewer and settle in-flight messages before resetting fixture state.
+  await page.goto('about:blank');await popup.evaluate(()=>chrome.runtime.sendMessage({type:'GET_STATE'}));
+  await set(Core.initialState());await page.goto('https://www.instagram.com/');
+  await page.evaluate(()=>{
+   const modal=document.createElement('div');modal.setAttribute('role','dialog');modal.id='reel-dialog';modal.style='position:fixed;inset:0;background:white';
+   modal.innerHTML='<div id="modal-viewer" style="height:600px;width:400px;overflow:auto">'+Array.from({length:12},(_,i)=>'<section style="height:600px"><a href="/reel/M'+i+'/">Reel</a><video style="display:block;width:400px;height:560px"></video></section>').join('')+'</div>';
+   document.body.append(modal);
+  });
+  await page.waitForFunction(()=>document.querySelector('[data-still-ui="status"]')?.dataset.stillViewed==='1');
+  await page.locator('#modal-viewer').evaluate(n=>n.scrollTop=600);
+  await page.waitForFunction(()=>document.querySelector('[data-still-ui="status"]')?.dataset.stillViewed==='2');
+  assert.equal(page.url(),'https://www.instagram.com/');
+  await page.locator('#reel-dialog').evaluate(n=>n.remove());await page.waitForFunction(()=>!document.querySelector('[data-still-ui="status"]'));
+  pass('Home-opened modal Reels still count independently of the background feed');
+  await set(Core.initialState());await page.goto('https://www.instagram.com/reels/R0/');
+  await page.waitForFunction(()=>document.querySelector('[data-still-ui="status"]')?.dataset.stillViewed==='1');
+  await page.evaluate(()=>window.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight'].includes(event.key))history.pushState({},'', '/reels/WRONG_REEL/')}));
+  await page.keyboard.press('ArrowLeft');await page.keyboard.press('ArrowRight');
+  assert.equal(page.url(),'https://www.instagram.com/reels/R0/');assert.equal((await get()).batches.reels.seen.length,1);
+  pass('keyboard Left/Right cannot bypass Reel navigation or consume another Reel');
+  for(let i=1;i<10;i++){await page.locator('[aria-label="Navigate to next Reel"]').click();await page.waitForFunction(n=>document.querySelector('[data-still-ui="status"]')?.dataset.stillViewed===String(n),i+1,{timeout:2500})}
+  assert.equal(await page.locator('[aria-label="Navigate to next Reel"]').isVisible(),false);
+  await page.mouse.move(200,300);await page.mouse.wheel(0,2000);await page.keyboard.press('ArrowDown');await page.waitForTimeout(250);assert.equal(page.url(),'https://www.instagram.com/reels/R9/');
+  await page.locator('[aria-label="Navigate to previous Reel"]').click();await page.waitForFunction(()=>!document.querySelector('[aria-label="Navigate to next Reel"]').hasAttribute('data-still-no-down'));
+  pass('ten-Reel counter stops further navigation, keeps Previous, and restores Down when backtracking');
+  await openPopup();await popup.waitForFunction(()=>!document.querySelector('#more-reels').disabled);
+  await popup.locator('#more-reels').click();await popup.waitForFunction(()=>document.querySelector('#more-reels').textContent.startsWith('Wait'));
+  const pending=await get();assert.equal(pending.more.requests,1);assert.equal(pending.batches.reels.seen.length,10);
+  await popup.goto('about:blank');await page.waitForFunction(()=>document.querySelector('[data-still-ui="status"]')?.dataset.stillViewed==='1',{},{timeout:16000});
+  assert.equal((await get()).batches.reels.generation,1);pass('real first ten-second countdown persists after closing the popup, then renews exactly one batch');
+  await openPopup();await popup.setViewportSize({width:408,height:850});await popup.waitForTimeout(200);fs.mkdirSync(path.resolve(__dirname,'../preview'),{recursive:true});await popup.screenshot({path:path.resolve(__dirname,'../preview/popup.png'),fullPage:true});
+  assert.deepEqual(errors,[]);console.log(`\n${checks} Instagram browser checks passed, no JavaScript errors.`);
+ }finally{await context.close();fs.rmSync(profile,{recursive:true,force:true})}
+})().catch(e=>{console.error(e);process.exitCode=1});
