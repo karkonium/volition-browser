@@ -8,6 +8,7 @@
   <script src="core.js" defer></script>
   <script src="youtube-policy.js" defer></script>
   <script src="usage-core.js" defer></script>
+  <script src="linkedin-policy.js" defer></script>
   <script src="popup.js" defer></script>
 </head>
 <body>
@@ -18,14 +19,15 @@
       <div class="activity-grid">
         <article class="activity"><h3>Instagram</h3><strong id="instagram-time">0m</strong><p><span id="instagram-reels">0</span> Reels <span class="separator">·</span> <span id="instagram-posts">0</span> posts</p></article>
         <article class="activity"><h3>YouTube</h3><strong id="youtube-time">0m</strong><p><span id="youtube-videos">0</span> videos watched</p></article>
+        <article class="activity"><h3>LinkedIn</h3><strong id="linkedin-time">0m</strong><p><span id="linkedin-posts">0</span> posts viewed</p></article>
       </div>
     </section>
-    <nav class="site-tabs" aria-label="Choose website"><button id="instagram-tab" aria-controls="instagram-panel" aria-pressed="true" data-site="instagram">Instagram</button><button id="youtube-tab" aria-controls="youtube-panel" aria-pressed="false" data-site="youtube">YouTube</button></nav>
+    <nav class="site-tabs" aria-label="Choose website"><button id="instagram-tab" aria-controls="instagram-panel" aria-pressed="true" data-site="instagram">Instagram</button><button id="youtube-tab" aria-controls="youtube-panel" aria-pressed="false" data-site="youtube">YouTube</button><button id="linkedin-tab" aria-controls="linkedin-panel" aria-pressed="false" data-site="linkedin">LinkedIn</button></nav>
     <div id="instagram-panel">
       <section class="spaces" aria-label="Instagram controls">
-        <article class="space"><div class="feature-copy"><h3>Reels <span id="reels-reveal">Hidden</span></h3><p>Show the button for 30s.</p></div><button class="unlock" id="show-reels" data-action="show" data-feature="reels">Show Reels</button></article>
-        <article class="space"><div class="feature-copy"><h3>Search <span id="explore-reveal">Hidden</span></h3><p>Show the button for 30s.</p></div><button class="unlock" id="show-search" data-action="show" data-feature="explore">Show Search</button></article>
-        <article class="space"><div class="feature-copy"><h3>More Reels <span id="reels-count">0 / 10</span></h3><p id="more-detail">Finish this batch for ten more.</p></div><button class="unlock" id="more-reels" data-action="more_reels">More Reels</button></article>
+        <article class="space"><div class="feature-copy"><h3>Reels <span id="reels-reveal">Hidden</span></h3><p id="reels-detail">Wait, then reveal for 30s.</p></div><button class="unlock wait-progress" id="show-reels" data-action="show" data-feature="reels" disabled><span class="button-label">Show Reels</span><span class="button-fill" aria-hidden="true">Show Reels</span></button></article>
+        <article class="space"><div class="feature-copy"><h3>Search <span id="explore-reveal">Hidden</span></h3><p id="explore-detail">Wait, then reveal for 30s.</p></div><button class="unlock wait-progress" id="show-search" data-action="show" data-feature="explore" disabled><span class="button-label">Show Search</span><span class="button-fill" aria-hidden="true">Show Search</span></button></article>
+        <article class="space"><div class="feature-copy"><h3>More Reels <span id="reels-count">0 / 10</span></h3><p id="more-detail">Finish this batch for ten more.</p></div><button class="unlock wait-progress" id="more-reels" data-action="more_reels" disabled><span class="button-label">More Reels</span><span class="button-fill" aria-hidden="true">More Reels</span></button></article>
         <article class="space"><div class="feature-copy"><h3>Block IG login <span id="login-state">Checking…</span></h3><p id="login-detail">Log out and keep login blocked.</p></div><button class="unlock" id="login-block" aria-pressed="false" disabled>Checking…</button></article>
       </section>
       <p id="wait-status" class="batch-note" role="status"></p>
@@ -38,9 +40,16 @@
       </section>
       <p class="batch-note" aria-label="YouTube limits">Limits: 20 Home/search videos · 5 recommendations · 10 comments (Top or Newest).<br>Shorts in Search open as regular videos.</p>
     </section>
+    <section id="linkedin-panel" aria-labelledby="linkedin-tab" hidden>
+      <section class="spaces" aria-label="LinkedIn controls">
+        <article class="space"><div class="feature-copy"><h3>Home <span id="linkedin-home-state">Hidden</span></h3><p id="linkedin-home-detail">Empty until unlocked · 10 posts.</p></div><button id="linkedin-home" class="unlock" disabled>Show 5m</button></article>
+        <article class="space"><div class="feature-copy"><h3>Recommendations <span id="linkedin-network-state">Hidden</span></h3><p id="linkedin-network-detail">First 3 cards · My Network.</p></div><button id="linkedin-network" class="unlock" disabled>Show 5m</button></article>
+      </section>
+      <p class="batch-note">Home: 10 posts for 5m · My Network: 3 cards for 5m.<br>Both hide automatically. Navigation and invitations stay usable.</p>
+    </section>
     <div id="notice" class="notice" role="status" aria-live="polite"></div>
   </main>
-  <footer><span>Local & private</span><button id="about-toggle" aria-expanded="false" aria-controls="about">How it counts</button></footer>
-  <aside id="about" hidden>Activity starts with this update. Time counts in a focused tab while you interact, or while a visible video plays. After 60 seconds without interaction, reading time pauses. A YouTube video counts after 5 seconds of visible playback; a Reel after 2 seconds; a post after 1 second in view. Each item counts once per local day. These are viewing estimates, not completed videos. Daily totals reset at local midnight. Nothing leaves this device.</aside>
+  <footer><span>Local & private · <span id="build-version"></span></span><button id="about-toggle" aria-expanded="false" aria-controls="about">How it counts</button></footer>
+  <aside id="about" hidden>Activity starts with this update. Time counts in a focused tab while you interact, or while a visible video plays. After 60 seconds without interaction, reading time pauses. A YouTube video counts after 5 seconds of visible playback; a Reel after 2 seconds; an Instagram or LinkedIn post after 1 second in view. Each item counts once per local day. These are viewing estimates, not completed videos. Daily totals reset at local midnight. Nothing leaves this device.</aside>
 </body>
 </html>

@@ -1,4 +1,4 @@
-importScripts('core.js', 'youtube-policy.js', 'usage-core.js', 'login-guard.js');
+importScripts('core.js', 'youtube-policy.js', 'usage-core.js', 'login-guard.js','linkedin-policy.js');
 const { normalize, reduce, FEATURES } = StillCore;
 let queue = Promise.resolve();
 
@@ -8,20 +8,28 @@ async function youtubeAccess(message = {}) {
   if (JSON.stringify(raw) !== JSON.stringify(result.state)) await chrome.storage.local.set({ youtubeAccess: result.state });
   return result.state;
 }
+async function linkedinAccess(message={}){
+  const {linkedinAccess:raw}=await chrome.storage.local.get('linkedinAccess');
+  const result=FiniteLinkedInPolicy.reduce(raw,message);
+  if(JSON.stringify(raw)!==JSON.stringify(result.state))await chrome.storage.local.set({linkedinAccess:result.state});
+  return result;
+}
 async function updateBadge(state) {
   const now = Date.now();
   const access = await youtubeAccess();
+  const {state:linkedin}=await linkedinAccess();
   const active = FEATURES.filter(key => state.reveals[key] > now).length + (access.until > now ? 1 : 0);
+  const waits=[state.more,...FEATURES.map(key=>state.navigation[key])];
   await chrome.action.setBadgeBackgroundColor({ color: '#245e4c' });
-  await chrome.action.setBadgeText({ text: state.more.readyAt > now || access.readyAt > now ? '…' : access.ready ? 'Ready' : active ? String(active) : '' });
-  const next = Math.min(...[...FEATURES.map(key => state.reveals[key]), state.more.readyAt, access.readyAt, access.until].filter(time => time > now));
+  await chrome.action.setBadgeText({ text: waits.some(wait=>wait.readyAt>now) || access.readyAt>now ? '…' : access.ready || waits.some(wait=>wait.ready) ? 'Ready' : active ? String(active) : '' });
+  const next = Math.min(...[...FEATURES.map(key => state.reveals[key]), ...waits.map(wait=>wait.readyAt), access.readyAt, access.until,...FiniteLinkedInPolicy.FEATURES.map(key=>linkedin[key].until)].filter(time => time > now));
   if (Number.isFinite(next)) await chrome.alarms.create('still-expiry', { when: next });
   else await chrome.alarms.clear('still-expiry');
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   // Instagram content scripts may record usage; only extension pages can grant time.
-  const privileged = ['SET_LOGIN_BLOCK','YOUTUBE_RECOMMENDATIONS', 'YOUTUBE_REVEAL', 'SHOW', 'MORE_REELS', 'UNLOCK', 'LOCK', 'LOCK_ALL', 'RESET_BATCH', 'GET_YOUTUBE', 'YOUTUBE_RESET'];
+  const privileged = ['LINKEDIN_UNLOCK','LINKEDIN_HIDE','GET_LINKEDIN','LINKEDIN_RESET','SET_LOGIN_BLOCK','YOUTUBE_RECOMMENDATIONS', 'YOUTUBE_REVEAL', 'WAIT_SHOW', 'CLAIM_REELS', 'SHOW', 'MORE_REELS', 'UNLOCK', 'LOCK', 'LOCK_ALL', 'RESET_BATCH', 'GET_YOUTUBE', 'YOUTUBE_RESET'];
   const popupSender = sender.url === chrome.runtime.getURL('popup.html');
   if (privileged.includes(message?.type) && !popupSender) {
     respond({ error: 'Open the Finite Scroll popup to change access.' });
@@ -43,7 +51,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     }
     if (message?.type === 'RECORD_USAGE') {
       const host = new URL(sender.url).hostname;
-      const site = ['instagram.com','www.instagram.com'].includes(host) ? 'instagram' : ['youtube.com','www.youtube.com'].includes(host) ? 'youtube' : null;
+      const site = ['instagram.com','www.instagram.com'].includes(host) ? 'instagram' : ['youtube.com','www.youtube.com'].includes(host)?'youtube':['linkedin.com','www.linkedin.com'].includes(host)?'linkedin':null;
       if (!site || site !== message.site || !Number.isInteger(sender.tab?.id)) throw new Error('Site tab required.');
       const tab = await chrome.tabs.get(sender.tab.id);
       const window = await chrome.windows.get(tab.windowId);
@@ -59,6 +67,28 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       await updateBadge(normalize(still));
       respond({access});
       return;
+    }
+    if(['GET_LINKEDIN_ACCESS','LINKEDIN_UNLOCK','LINKEDIN_HIDE','LINKEDIN_CONSUME'].includes(message?.type)){
+      let linkedinSender=false;try{linkedinSender=['linkedin.com','www.linkedin.com'].includes(new URL(sender.url).hostname);}catch{}
+      if(!popupSender && !(linkedinSender && Number.isInteger(sender.tab?.id)))throw new Error('LinkedIn tab or popup required.');
+      const type=message.type==='LINKEDIN_UNLOCK'?'UNLOCK':message.type==='LINKEDIN_HIDE'?'HIDE':message.type==='LINKEDIN_CONSUME'?'CONSUME':'GET';
+      if(type==='CONSUME' && !linkedinSender)throw new Error('LinkedIn tab required.');
+      const result=await linkedinAccess({...message,type});
+      if(type!=='CONSUME'){const {still}=await chrome.storage.local.get('still');await updateBadge(normalize(still));}
+      respond({...result,access:result.state});return;
+    }
+    if(message?.type==='LINKEDIN_STATUS'){
+      const host=new URL(sender.url).hostname;
+      if(!['linkedin.com','www.linkedin.com'].includes(host) || !Number.isInteger(sender.tab?.id))throw new Error('LinkedIn tab required.');
+      const source=message.status||{};
+      if(!['home','network'].includes(source.surface))throw new Error('Unknown LinkedIn view.');
+      const limit=FiniteLinkedInPolicy.LIMITS[source.surface];
+      const status={surface:source.surface,count:Math.max(0,Math.min(limit||10000,Math.floor(Number(source.count)||0))),limit,tabId:sender.tab.id};
+      await chrome.storage.session.set({linkedinStatus:status});respond({ok:true});return;
+    }
+    if(message?.type==='GET_LINKEDIN' || message?.type==='LINKEDIN_RESET'){
+      if(message.type==='LINKEDIN_RESET')throw new Error('Use the Home or recommendations unlock button.');
+      const {linkedinStatus}=await chrome.storage.session.get('linkedinStatus');respond({linkedin:linkedinStatus||null});return;
     }
     if (message?.type === 'YOUTUBE_STATUS') {
       let youtubeSender = false;

@@ -1,6 +1,7 @@
 'use strict';
 let state = StillCore.initialState();
 let busy = false;
+let instagramLoaded=false, instagramSync=false;
 const notice = document.getElementById('notice');
 let youtube = null;
 let youtubeAccess = StillYouTubePolicy.initialState();
@@ -13,16 +14,8 @@ function renderYouTube() {
   const remaining = Math.max(0,youtubeAccess.until-now);
   const waiting = Math.max(0,youtubeAccess.readyAt-now);
   const button = document.getElementById('youtube-recommendations');
-  button.disabled = !youtubeAccessLoaded || youtubeAccessBusy || !!youtubeAccess.readyAt || remaining>0;
   const label = !youtubeAccessLoaded?'Checking…':waiting?`Wait ${duration(waiting)}`:youtubeAccess.readyAt?'Finishing…':remaining?`Visible ${duration(remaining)}`:youtubeAccess.ready?'Show for 1m':'Start wait';
-  button.querySelector('.button-label').textContent=label;
-  button.querySelector('.button-fill').textContent=label;
-  button.setAttribute('aria-label',label);
-  button.classList.toggle('is-waiting',!!youtubeAccess.readyAt);
-  const total=Math.max(1,youtubeAccess.readyAt-youtubeAccess.waitStartedAt);
-  const progress=youtubeAccess.readyAt?Math.max(0,Math.min(100,(1-waiting/total)*100)):100;
-  button.style.setProperty('--wait-progress',`${progress}%`);
-  button.setAttribute('aria-description',youtubeAccess.readyAt?`${Math.round(progress)}% of wait complete` : youtubeAccess.ready?'Ready. Click to show recommendations for one minute.':'');
+  renderWaitButton(button,youtubeAccess,label,!youtubeAccessLoaded || youtubeAccessBusy || !!youtubeAccess.readyAt || remaining>0);
   document.getElementById('youtube-access-status').textContent=waiting?'Hidden while you wait.':remaining?'Recommendations visible.':youtubeAccess.ready?'Ready when you are.':'Hidden by default.';
   const requests=youtubeAccess.day===StillYouTubePolicy.dayKey(now)?youtubeAccess.requests:0;
   document.getElementById('youtube-access-detail').textContent=waiting?'Ready stays available until you return.':remaining?'Hides automatically. Playback continues.':youtubeAccess.ready?'Click to start your one minute.':`Next wait: ${duration(StillYouTubePolicy.waitFor(requests))}. Resets at midnight.`;
@@ -53,7 +46,7 @@ document.getElementById('youtube-recommendations').addEventListener('click', asy
   finally { youtubeAccessBusy = false; renderYouTube(); }
 });
 document.querySelectorAll('[data-site]').forEach(button => button.addEventListener('click', () => {
-  for (const site of ['instagram','youtube']) {
+  for (const site of ['instagram','youtube','linkedin']) {
     document.getElementById(`${site}-panel`).hidden = site !== button.dataset.site;
     document.getElementById(`${site}-tab`).setAttribute('aria-pressed', String(site === button.dataset.site));
   }
@@ -78,42 +71,54 @@ function duration(ms) {
   const seconds = Math.ceil(ms / 1000);
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m${seconds % 60 ? ` ${seconds % 60}s` : ''}`;
 }
+function renderWaitButton(button,wait,label,disabled) {
+  const waiting=Math.max(0,wait.readyAt-Date.now());
+  button.disabled=disabled;
+  for(const span of button.querySelectorAll('.button-label,.button-fill'))if(span.textContent!==label)span.textContent=label;
+  button.setAttribute('aria-label',label);
+  button.classList.toggle('is-waiting',!!wait.readyAt);
+  const total=Math.max(1,wait.readyAt-wait.waitStartedAt);
+  const progress=wait.readyAt?Math.max(0,Math.min(100,(1-waiting/total)*100)):100;
+  button.style.setProperty('--wait-progress',`${progress}%`);
+  button.setAttribute('aria-description',wait.readyAt?`${Math.round(progress)}% of wait complete`:wait.ready?'Ready. Click when you want to continue.':'');
+}
+function nextWait(wait,now) {return StillCore.waitFor(wait.windowStart && now-wait.windowStart<StillCore.DAY?wait.requests:0);}
 function render() {
-  const now = Date.now();
-  for (const feature of StillCore.FEATURES) {
-    const remaining = Math.max(0, state.reveals[feature] - now);
-    document.getElementById(`${feature}-reveal`).textContent = remaining ? `${duration(remaining)} visible` : 'Hidden';
+  const now=Date.now();
+  for(const feature of StillCore.FEATURES){
+    const wait=state.navigation[feature],remaining=Math.max(0,state.reveals[feature]-now),waiting=Math.max(0,wait.readyAt-now);
+    document.getElementById(`${feature}-reveal`).textContent=remaining?`${duration(remaining)} visible`:waiting?'Waiting':wait.ready?'Ready':'Hidden';
+    const label=!instagramLoaded?'Checking…':waiting?`Wait ${duration(waiting)}`:wait.readyAt?'Finishing…':remaining?`Visible ${duration(remaining)}`:wait.ready?(feature==='reels'?'Show Reels':'Show Search'):'Start wait';
+    renderWaitButton(document.getElementById(feature==='reels'?'show-reels':'show-search'),wait,label,!instagramLoaded || busy || !!wait.readyAt || remaining>0);
+    document.getElementById(`${feature}-detail`).textContent=waiting?'Ready stays available until you return.':remaining?'Only the navigation button expires.':wait.ready?'Click to reveal the button for 30s.':`Next wait: ${duration(nextWait(wait,now))} · 30s reveal.`;
   }
-  const full = state.batches.reels.seen.length >= StillCore.LIMITS.reels;
-  const waiting = Math.max(0, state.more.readyAt - now);
-  const more = document.getElementById('more-reels');
-  more.disabled = busy || !full || !!state.more.readyAt;
-  more.textContent = waiting ? `Wait ${duration(waiting)}` : state.more.readyAt ? 'Preparing…' : 'More Reels';
-  document.getElementById('reels-count').textContent = `${state.batches.reels.seen.length} / 10`;
-  const requests = now - state.more.windowStart >= StillCore.DAY ? 0 : state.more.requests;
-  document.getElementById('more-detail').textContent = waiting ? 'Ten more when the wait ends.' : full ? `Next wait: ${duration(StillCore.waitFor(requests))}.` : 'Finish this batch for ten more.';
-  document.getElementById('wait-status').textContent = waiting ? 'You can close this popup. The wait continues.' : 'Waits: 10s → 30s → 1m → double. Reset after 24h.';
+  const full=state.batches.reels.seen.length>=StillCore.LIMITS.reels,wait=state.more,waiting=Math.max(0,wait.readyAt-now);
+  const label=!instagramLoaded?'Checking…':waiting?`Wait ${duration(waiting)}`:wait.readyAt?'Finishing…':wait.ready?'More Reels':full?'Start wait':'More Reels';
+  renderWaitButton(document.getElementById('more-reels'),wait,label,!instagramLoaded || busy || !full || !!wait.readyAt);
+  document.getElementById('reels-count').textContent=`${state.batches.reels.seen.length} / 10`;
+  document.getElementById('more-detail').textContent=waiting?'Ready stays available until you return.':wait.ready?'Click when you want ten more.':full?`Next wait: ${duration(nextWait(wait,now))}.`:'Finish this batch for ten more.';
+  document.getElementById('wait-status').textContent='Waits: 10s → 30s → 1m → double. Each resets after 24h.';
 }
 
 async function send(message) {
   const result = await chrome.runtime.sendMessage(message);
   if (!result || result.error) throw new Error(result?.error || 'Finite Scroll could not connect. Reopen the popup.');
-  state = StillCore.normalize(result.state);
+  state = StillCore.normalize(result.state);instagramLoaded=true;
   render();
 }
 
-document.addEventListener('click', async event => {
-  const button = event.target.closest('button[data-action]');
-  if (!button || busy) return;
-  busy = true;
-  notice.classList.remove('error');
-  try {
-    const { action, feature } = button.dataset;
-    await send({ type: action.toUpperCase(), feature });
-    notice.textContent = action === 'show' ? 'The Instagram button is visible for 30 seconds.' : 'Countdown started. Ten more Reels will be ready afterward.';
-  } catch (error) {
-    notice.classList.add('error'); notice.textContent = error.message;
-  } finally { busy = false; render(); }
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('button[data-action]');
+  if(!button || busy || !instagramLoaded || button.disabled)return;
+  const {action,feature}=button.dataset;
+  const ready=action==='show'?state.navigation[feature].ready:state.more.ready;
+  const type=action==='show'?(ready?'SHOW':'WAIT_SHOW'):(ready?'CLAIM_REELS':'MORE_REELS');
+  busy=true;render();notice.classList.remove('error');
+  try{
+    await send({type,feature});
+    notice.textContent=ready?(action==='show'?'Instagram button visible for 30 seconds.':'Ten more Reels unlocked.'):'Wait started. Click the ready button when you return.';
+  }catch(error){notice.classList.add('error');notice.textContent=error.message;}
+  finally{busy=false;render();}
 });
 document.getElementById('about-toggle').addEventListener('click', event => {
   const about = document.getElementById('about');
@@ -131,7 +136,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     youtubeAccess = StillYouTubePolicy.normalize(changes.youtubeAccess.newValue);youtubeAccessLoaded=true;renderYouTube();
   }
   if (area === 'local' && changes.still) {
-    state = StillCore.normalize(changes.still.newValue);
+    state = StillCore.normalize(changes.still.newValue);instagramLoaded=true;
     render();
   }
 });
@@ -143,7 +148,10 @@ setInterval(() => {
   render();
   renderYouTube();
   if (youtubeAccess.readyAt && Date.now() >= youtubeAccess.readyAt) syncYouTubeAccess().catch(()=>{});
-  if (state.more.readyAt && Date.now() >= state.more.readyAt) send({type:'GET_STATE'}).catch(() => {});
+  const waits=[state.more,...StillCore.FEATURES.map(key=>state.navigation[key])];
+  if(!instagramSync && !busy && waits.some(wait=>wait.readyAt && Date.now()>=wait.readyAt)){
+    instagramSync=true;send({type:'GET_STATE'}).catch(()=>{}).finally(()=>{instagramSync=false;});
+  }
 }, 250);
 chrome.runtime.sendMessage({type:'GET_YOUTUBE'}).then(result => {
   youtube = result?.youtube || null;
@@ -161,7 +169,8 @@ function renderUsage() {
   }
   document.getElementById('instagram-time').textContent=time(today.instagramMs);
   document.getElementById('youtube-time').textContent=time(today.youtubeMs);
-  for (const [id,kind] of [['instagram-reels','reels'],['instagram-posts','posts'],['youtube-videos','videos']]) document.getElementById(id).textContent=today[kind].length.toLocaleString();
+  document.getElementById('linkedin-time').textContent=time(today.linkedinMs||0);
+  for (const [id,kind] of [['instagram-reels','reels'],['instagram-posts','posts'],['youtube-videos','videos'],['linkedin-posts','linkedinPosts']]) document.getElementById(id).textContent=(today[kind]?.length||0).toLocaleString();
 }
 chrome.storage.onChanged.addListener((changes,area)=>{
   if (area==='local' && changes.finiteUsage) {usage=changes.finiteUsage.newValue || FiniteUsage.initial(Date.now());renderUsage();}
@@ -200,3 +209,39 @@ chrome.storage.onChanged.addListener((changes,area)=>{
   if(area==='local' && changes.instagramLoginBlocked && !loginBusy)void getLogin().catch(()=>{});
 });
 renderLogin();getLogin().catch(error=>{notice.textContent=error.message;notice.classList.add('error');});
+
+let linkedinAccess=FiniteLinkedInPolicy.initialState(),linkedinLoaded=false,linkedinBusy=false,linkedinSync=false;
+function renderLinkedIn(){
+  for(const feature of FiniteLinkedInPolicy.FEATURES){
+    const batch=linkedinAccess[feature],remaining=Math.max(0,batch.until-Date.now());
+    const button=document.getElementById(`linkedin-${feature}`);
+    button.disabled=!linkedinLoaded || linkedinBusy;
+    button.textContent=!linkedinLoaded?'Checking…':remaining?'Hide':'Show 5m';
+    button.setAttribute('aria-pressed',String(remaining>0));
+    document.getElementById(`linkedin-${feature}-state`).textContent=remaining?duration(remaining):'Hidden';
+    document.getElementById(`linkedin-${feature}-detail`).textContent=remaining?`${batch.seen.length} / ${FiniteLinkedInPolicy.LIMITS[feature]} ${feature==='home'?'posts':'cards'} · hides automatically.`:feature==='home'?'Empty until unlocked · 10 posts.':'First 3 cards · My Network.';
+  }
+}
+async function syncLinkedIn(message={type:'GET_LINKEDIN_ACCESS'}){
+  const result=await chrome.runtime.sendMessage(message);if(result?.error)throw new Error(result.error);
+  if(result?.access){linkedinAccess=FiniteLinkedInPolicy.normalize(result.access);linkedinLoaded=true;}renderLinkedIn();
+}
+for(const feature of FiniteLinkedInPolicy.FEATURES)document.getElementById(`linkedin-${feature}`).addEventListener('click',async()=>{
+  if(linkedinBusy || !linkedinLoaded)return;
+  const hide=linkedinAccess[feature].until>Date.now();linkedinBusy=true;renderLinkedIn();notice.classList.remove('error');
+  try{await syncLinkedIn({type:hide?'LINKEDIN_HIDE':'LINKEDIN_UNLOCK',feature});notice.textContent=hide?'Hidden again.':feature==='home'?'Home unlocked: up to ten posts for five minutes.':'First three recommendations unlocked for five minutes.';}
+  catch(error){notice.classList.add('error');notice.textContent=error.message;}
+  finally{linkedinBusy=false;renderLinkedIn();}
+});
+chrome.storage.onChanged.addListener((changes,area)=>{
+  if(area==='local' && changes.linkedinAccess){linkedinAccess=FiniteLinkedInPolicy.normalize(changes.linkedinAccess.newValue);linkedinLoaded=true;renderLinkedIn();}
+});
+syncLinkedIn().catch(error=>{notice.textContent=error.message;notice.classList.add('error');});
+setInterval(()=>{
+  renderLinkedIn();
+  if(!linkedinSync && FiniteLinkedInPolicy.FEATURES.some(key=>linkedinAccess[key].until && Date.now()>=linkedinAccess[key].until)){
+    linkedinSync=true;syncLinkedIn().catch(()=>{}).finally(()=>{linkedinSync=false;});
+  }
+},250);
+
+document.getElementById('build-version').textContent='v'+chrome.runtime.getManifest().version;

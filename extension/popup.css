@@ -12,3 +12,6 @@ header{height:60px}main{padding-top:16px}.site-tabs{margin-top:16px;margin-botto
 .wait-progress{position:relative;overflow:hidden}.wait-progress .button-label{position:relative;z-index:0}.wait-progress .button-fill{display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:var(--green);color:#fff;clip-path:inset(0 calc(100% - var(--wait-progress,0%)) 0 0);transition:clip-path .25s linear;pointer-events:none}
 .wait-progress.is-waiting:disabled{opacity:1;background:#dfe6da;border-color:#ccd8c7;color:var(--ink);cursor:wait}.wait-progress.is-waiting .button-fill{display:flex}
 @media(prefers-reduced-motion:reduce){.wait-progress .button-fill{transition:none}}
+
+/* Three compact activity cards retain the same dashboard and button geometry. */
+.activity-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.activity{padding-left:8px;padding-right:8px}.activity strong{font-size:22px;letter-spacing:-.7px}.activity p{font-size:9px;line-height:13px}.separator{padding:0 1px}

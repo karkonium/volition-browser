@@ -1,0 +1,13 @@
+/* The SDUI workspace includes sidebars; gate its Primary content column only. */
+html[data-finite-linkedin-surface="home"][data-finite-linkedin-home="closed"] [aria-label="Primary content"],
+html[data-finite-linkedin-surface="home"] [aria-label="Primary content"]:not([data-finite-linkedin-root]),
+html[data-finite-linkedin-surface="network"] [aria-label="Primary content"]:not([data-finite-linkedin-root]){display:none!important}
+/* Only admitted native cards occupy space; scrolling itself stays native. */
+html[data-finite-linkedin-surface="home"][data-finite-linkedin-home="closed"] :is(main,[role="main"]):not(:has([aria-label="Primary content"])),
+html[data-finite-linkedin-surface="home"] :is(main,[role="main"]):not(:has([aria-label="Primary content"])):not([data-finite-linkedin-root]),
+html[data-finite-linkedin-surface="network"] [role="dialog"]:has([data-view-name="cohorts-see-all-list"],.mn-pymk-list,.discover-entity-type-section,.discover-cohort,.mn-discovery__results,.discover-entity-type-card,.mn-discovery-person-card,.mn-connection-card,[data-view-name="network-discovery-profile-card"],[data-view-name="network-discovery-card"],[data-view-name="cohort-card"]):not([data-finite-linkedin-root]),
+html[data-finite-linkedin-surface="network"] :is(main,[role="main"]):not(:has([aria-label="Primary content"])):not([data-finite-linkedin-root]){display:none!important}
+[data-finite-linkedin-root] > :not([data-finite-linkedin-branch]):not([data-finite-linkedin-allowed]),
+[data-finite-linkedin-branch]:not([data-finite-linkedin-allowed]) > :not([data-finite-linkedin-branch]):not([data-finite-linkedin-allowed]){display:none!important}
+
+html[data-finite-linkedin-surface="network"][data-finite-linkedin-network="closed"] [data-finite-linkedin-card="network"]{display:none!important}

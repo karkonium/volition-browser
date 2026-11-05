@@ -1,16 +1,17 @@
 {
   "name": "finite-scroll",
-  "version": "1.9.1",
+  "version": "1.13.0",
   "private": true,
-  "description": "Natural stops for Instagram and YouTube",
+  "description": "Natural stops for Instagram, YouTube, and LinkedIn",
   "scripts": {
-    "test": "node --test tests/core.test.cjs tests/youtube-policy.test.cjs tests/usage.test.cjs tests/login-guard.test.cjs",
+    "test": "node --test tests/core.test.cjs tests/youtube-policy.test.cjs tests/usage.test.cjs tests/login-guard.test.cjs tests/linkedin-policy.test.cjs",
     "test:browser": "node tests/browser.cjs",
     "test:youtube": "node tests/youtube.cjs",
     "icons": "node tools/icons.cjs",
     "package": "python3 tools/package.py",
     "test:usage": "node tests/usage-browser.cjs",
-    "test:login": "node tests/login-browser.cjs"
+    "test:login": "node tests/login-browser.cjs",
+    "test:linkedin": "node tests/linkedin.cjs"
   },
   "devDependencies": {
     "playwright": "^1.58.0",

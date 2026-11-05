@@ -21,3 +21,11 @@ test('validates metrics, caps delayed reports and prunes old days',()=>{
  const d=s.days[U.dayKey(now)];assert.equal(d.youtubeMs,10000);assert.equal(d.videos.length,0);assert.equal(d.posts.length,0);
  s.days['2000-01-01']=U.bucket();s=U.record(s,{site:'youtube',ms:-10},now);assert.equal(s.days['2000-01-01'],undefined);
 });
+test('LinkedIn extends existing daily metrics without erasing Instagram or YouTube',()=>{
+ const now=Date.now(),key=U.dayKey(now);
+ const old={version:1,startedAt:now,days:{[key]:{instagramMs:5000,youtubeMs:8000,reels:[id],posts:[id],videos:[id]}}};
+ let s=U.record(old,{site:'linkedin',ms:5000,items:[{kind:'linkedinPosts',id}]},now);
+ s=U.record(s,{site:'linkedin',ms:5000,items:[{kind:'linkedinPosts',id}]},now);
+ assert.equal(s.days[key].linkedinMs,10000);assert.equal(s.days[key].linkedinPosts.length,1);
+ assert.equal(s.days[key].instagramMs,5000);assert.equal(s.days[key].youtubeMs,8000);assert.deepEqual(s.days[key].posts,[id]);
+});

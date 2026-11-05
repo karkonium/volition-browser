@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const site = location.hostname.endsWith('youtube.com') ? 'youtube' : 'instagram';
+  const site = location.hostname.endsWith('youtube.com')?'youtube':location.hostname.endsWith('linkedin.com')?'linkedin':'instagram';
   let last = performance.now(), activeAt = last, elapsed = 0, sending = false, ticks = 0;
   let day = new Date().toDateString();
   const dwell = new Map(), counted = new Set(), pending = new Map();
@@ -34,6 +34,7 @@
     const focused = document.visibilityState === 'visible' && document.hasFocus();
     let candidates=[];
     if (site === 'instagram') candidates = globalThis.FiniteScrollCandidates?.() || [];
+    else if(site==='linkedin')candidates=globalThis.FiniteLinkedInCandidates?.()||[];
     else if (location.pathname === '/watch' && !document.querySelector('#movie_player.ad-showing')) {
       const id = new URL(location.href).searchParams.get('v');
       const element = document.querySelector('#movie_player video,video.html5-main-video');
@@ -46,7 +47,7 @@
     const eligible = new Set();
     for (const item of candidates) {
       const key=`${item.kind}:${item.id}`;
-      if (!active || (item.kind !== 'posts' && !playing(item.element))) continue;
+      if (!active || (!['posts','linkedinPosts'].includes(item.kind) && !playing(item.element))) continue;
       eligible.add(key);
       if (counted.has(key)) continue;
       const total=(dwell.get(key)||0)+delta; dwell.set(key,total);

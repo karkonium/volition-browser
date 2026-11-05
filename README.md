@@ -1,19 +1,19 @@
-# Finite Scroll 1.9.1
+# Finite Scroll 1.13.0
 
-A local Chrome / Microsoft Edge extension that gives Instagram and YouTube feeds an ending. No redirect, replacement page, or full-screen stopping UI.
+A local Chrome / Microsoft Edge extension that gives Instagram, YouTube, and LinkedIn feeds an ending. No redirect, replacement page, or full-screen stopping UI.
 
 ## Instagram
 
 The Instagram popup has four controls:
 
-- **Show Reels:** reveals Instagram's Reels navigation button for 30 seconds.
-- **Show Search:** reveals Instagram's Search/Explore navigation button for 30 seconds.
-- **Block login:** signs out Instagram in this browser profile and blocks new login cookies until **Turn off** is pressed. Turning it on takes existing Instagram tabs to Instagram’s own login page. Google and YouTube sessions stay untouched.
-- **More Reels:** after ten unique Reels, request the next ten. The first request waits **10 seconds**, the second **30 seconds**, then **1 minute, 2 minutes, 4 minutes**, doubling afterward (capped at 24 hours). The escalation resets 24 hours after the first request in that window.
+- **Show Reels:** start a wait, then click the ready button to reveal Instagram's Reels navigation for 30 seconds.
+- **Show Search:** independently wait, then click to reveal Search/Explore navigation for 30 seconds.
+- **More Reels:** after ten unique Reels, wait and then click the ready button to unlock the next ten. Finishing the wait does not reset the batch until you click.
+- **Block login:** signs out Instagram and blocks login until **Turn off** is pressed. It remains immediate; it has no attention wait.
 
-Only navigation visibility expires. An open video, Search view, or social dialog never closes because thirty seconds elapsed. Revealing navigation does not reset consumed Reels or bypass a pending wait. The first ten Reels need no wait.
+Each of the three feed buttons has its own wait sequence: **10 seconds, 30 seconds, 1 minute, 2 minutes, 4 minutes**, then doubling (capped at 24 hours). Each escalation resets 24 hours after that button's first request. Countdown buttons fill from left to right. A completed wait stays ready across popup closure, page refresh, and browser restart until explicitly clicked; ready credits cannot be stacked or used twice. Reveals cannot be extended while active. Only navigation visibility expires after thirty seconds; an open video, Search view, or social dialog never closes because that timer elapsed.
 
-The small top-right on-page counter displays **X / 10**. The tenth Reel remains visible, its down arrow disappears, and previous admitted Reels remain accessible. Home-opened modal Reels are counted even when feed articles remain mounted behind them. Finishing a requested wait clears the batch once and refreshes any active Reel viewer. The wait survives popup closure, page refresh, and browser restart; its deadline and escalation are stored locally. When the browser is closed, completion takes effect on startup or the next state check. The 24-hour reset affects escalation, not the consumed batch. No reset button bypasses the wait.
+The first ten Reels need no More Reels wait. The small top-right on-page counter displays **X / 10**. The tenth Reel remains visible, its down arrow disappears, and previous admitted Reels remain accessible. Home-opened modal Reels count even when feed articles remain behind them. Claiming a ready More Reels button clears the batch once and refreshes active Reel viewers. Readiness alone never reloads a viewer or clears consumption. Existing batches and old pending More Reels waits migrate without resetting what you have watched. No reset button bypasses waiting.
 
 Home admits ten recognized posts per page visit. Search/Explore freezes the **first nonempty rendered batch of post tiles**, hides every later addition, and permits natural scrolling through that original set. Opening a result pins its post/Reel viewer: wheel, touch, keyboard and next controls cannot start a further feed. Comments retain their own scrolling and the inner photo carousel stays usable. Returning to Search keeps the original snapshot. Per-tab session storage retains the initial post IDs and selected result through viewer navigation and refresh; leaving for Home/profile clears that snapshot. It does not reuse the former 36-item allowance or share a persisted scroll budget. Follower/following list search boxes are separate from the main Search drawer and stay usable.
 
@@ -29,17 +29,27 @@ Shorts are removed from the sidebar and from Home/watch recommendations. They re
 
 Watch pages default to native theatre mode. The Default view / Theatre toggle, in-player Next/Previous controls, suggested-video cards, and end-screen video links stay hidden; Shift+N/Shift+P cannot skip videos. Playback controls and playlist links remain usable. The existing YouTube batch-reload button refreshes only the last active YouTube tab and does not grant recommendation access.
 
+## LinkedIn
+
+Home (`/feed/`) is **empty by default**. In the LinkedIn popup, **Show 5m** reveals at most **10 unique posts for five minutes**. The same allowance survives refreshes, route changes and other tabs; additional posts do not become visible. The button becomes **Hide** while active. At expiry the feed becomes empty again, without redirecting or locking scrolling.
+
+My Network recommendations are **hidden by default**. **Show 5m** reveals only **three individual recommendation cards for five minutes**. Additional cards and discovery dialogs cannot expand that allowance. Invitations, network management links and native Connect controls stay usable. Profiles, messaging, jobs and the connection directory remain outside these limits.
+
+Both controls use the same green buttons as Instagram and YouTube. Unlocks start only when clicked and cannot be extended while active. The dashboard records local LinkedIn time and posts actually viewed, with post IDs hashed before storage. Instagram and YouTube settings and waits remain unchanged.
+
+The display uses an allowlist of admitted native cards: new or unrecognized feed renderers remain hidden, rather than leaking past a selector-only limit. These limits control visible content, not every internal LinkedIn network prefetch. New layouts may require selector updates. No connection or invitation controls are clicked on your behalf.
+
 ## Install or update
 
 1. Open `edge://extensions` or `chrome://extensions` and enable Developer mode.
 2. Choose **Load unpacked** and select this project's `extension` directory, or extract `finite-scroll-extension.zip` and select its `finite-scroll-extension` directory.
 3. Pin Finite Scroll to the toolbar.
 
-For an existing unpacked installation, click **Reload** on the existing Still card (it becomes Finite Scroll) and refresh already-open Instagram/YouTube tabs. Confirm version **1.9.1**. Editing local files alone does not replace content scripts already running in browser tabs.
+For an existing unpacked installation, click **Reload** on the existing Still card (it becomes Finite Scroll) and refresh already-open Instagram/YouTube/LinkedIn tabs. Confirm version **1.13.0**. Editing local files alone does not replace content scripts already running in browser tabs.
 
 ## Privacy and limitations
 
-Runs only on HTTPS Instagram and YouTube (bare and `www` hosts). Permissions are `storage` for local state, `alarms` for deadlines, and `cookies` plus `declarativeNetRequestWithHostAccess` for the Instagram-only login block. Background host access is restricted to HTTPS Instagram and its subdomains. No analytics, remote scripts, external fonts, or extension-originated network calls. No passwords or private message contents are read. The login block uses the browser cookies API only for Instagram; cookie values are never saved or sent anywhere.
+Runs only on HTTPS Instagram, YouTube, and LinkedIn (bare and `www` hosts). Permissions are `storage` for local state, `alarms` for deadlines, and `cookies` plus `declarativeNetRequestWithHostAccess` for the Instagram-only login block. Background host access is restricted to HTTPS Instagram and its subdomains. No analytics, remote scripts, external fonts, or extension-originated network calls. No passwords or private message contents are read. The login block uses the browser cookies API only for Instagram; cookie values are never saved or sent anywhere.
 
 Instagram Reel identifiers are stored locally to deduplicate usage. Initial Search post identifiers and the selected result also stay in that Instagram tab’s session storage. A stable media URL path is a fallback identifier. Reveal deadlines, requested-wait deadlines, and escalation state also stay locally. Raw YouTube video/comment identifiers used by the feed limiter stay in page memory; the latest tab ID, view category, and counts go into extension session storage. The daily dashboard separately stores short hashed media identifiers for deduplication and daily time totals for up to a month. The recommendation wait count, local calendar day, wait deadline, and reveal deadline are stored locally across browser restarts; No video titles, search queries, comment contents, or raw YouTube watch URLs are persisted.
 
@@ -66,6 +76,7 @@ npm test
 npm run test:browser
 npm run test:usage
 npm run test:login
+npm run test:linkedin
 npm run test:youtube
 npm run package
 ```
@@ -144,3 +155,35 @@ Validation for 1.9.0: all 20 policy/metrics checks and 21 YouTube browser checks
 ## 1.9.1 — Ten Top comments or ten Newest first
 
 YouTube comments now stop at 10 top-level comments in either native sort. Switching **Sort by → Newest first** or back to **Top comments** admits the first ten of the newly sorted response, without charging it against the previous sort’s used allowance. The old comment DOM is retained while the new response loads, and the budget resets only when the sorted batch arrives. Late additional top-level comments stay hidden. Replies and reply continuations inside admitted threads remain available. The popup status and small limits note both show the new ten-comment limit. Reload the extension and refresh YouTube to activate.
+
+
+## 1.10.0 — Instagram wait-then-click buttons
+
+Show Reels, Show Search, and More Reels now use the same left-to-right filling countdown control as YouTube. Each button has an independent rolling-24-hour escalation and a ready state that persists until clicked. Show Reels/Search start their existing thirty-second navigation reveal only on that final click. More Reels renews its batch only on that final click. Old pending More Reels waits migrate into readiness, preserving the consumed batch. The login toggle stays immediate. No permissions are added. Reload the extension and refresh Instagram to load the updated policy and UI.
+
+Validation for 1.10.0: 19 policy/metrics checks, 17 Instagram browser checks, 24 YouTube browser checks, eight login/controls browser checks, and six dashboard browser checks pass. Instagram browser coverage uses real ten-second waits for navigation and More Reels, popup closure during waiting, left-to-right progress, persistent readiness, and explicit final-click activation. The three Instagram countdown/ready states were rendered and visually inspected. Live Edge activation is pending.
+
+
+## 1.11.0 — LinkedIn Home and My Network
+
+Adds LinkedIn content-script access, a matching popup tab, and local time/post metrics. Home ends at 10 unique posts; My Network ends after its initial recommendations. Native discovery dialogs are finite too. Initial Network snapshots survive replacement of the main element, while other native routes stay usable. The Instagram login block and all existing Instagram/YouTube waits remain unchanged. Existing daily metric records migrate without resetting previous totals.
+
+LinkedIn adds read/change access only for `https://linkedin.com/*` and `https://www.linkedin.com/*`; it adds no cookie or background host access for LinkedIn. Reload the existing extension and refresh LinkedIn to activate. Edge/Chrome may ask to approve the additional site. The LinkedIn behavior is tested in disposable Chromium using classic and modern fixtures; the signed-in live site has not been activated or verified.
+
+Validation for 1.11.0: all 90 checks pass (20 policy/metrics, 17 Instagram browser, 24 YouTube browser, eight login/controls browser, six dashboard browser, and 15 LinkedIn browser checks). LinkedIn coverage includes classic/modern markup, delayed initial results, late additions, main-element replacement, native discovery dialogs, ordinary scrolling, native controls, excluded routes, local metrics, popup layout, manual renewal, and isolation from Instagram/YouTube state. The LinkedIn popup was rendered and visually inspected.
+
+## 1.12.0 — LinkedIn defaults and timed unlocks
+
+Replaces the per-visit Home limit and Network snapshots with default-hidden controls. Home grants ten posts for five minutes; My Network grants one person for thirty seconds. The persisted, shared quota prevents reloads, extra tabs and discovery dialogs from opening another batch during the same grant. Hidden video playback is paused. No wheel interception, scroll clamping, redirects or on-page stopping UI is used.
+
+Reload the extension at `edge://extensions` (or `chrome://extensions`) and refresh LinkedIn. This update adds no site permissions beyond 1.11.0. Validation uses disposable Chromium fixtures; the live signed-in Edge site has not been verified for this version.
+
+Validation for 1.12.0: all 94 checks pass (25 policy/metrics, 17 Instagram browser, 24 YouTube browser, eight login browser, six usage browser, 14 LinkedIn browser). LinkedIn covers default-hidden surfaces, explicit unlocks, expiry, shared quotas across refreshes/tabs/dialogs, modern markup, unknown renderers, recycled identities, native controls and excluded routes, visible-post metrics, stable rendering across animation frames, popup layout, and isolation from IG/YouTube. The popup was rendered and visually inspected.
+
+## 1.12.1 — Current LinkedIn Home routes and SDUI cards
+
+A live Edge inspection identified `/feed/foryou/` as the active Home route. Earlier versions classified it as an unrestricted page. Home feed subroutes now share the default-hidden, ten-post/five-minute policy; `/feed/update/` individual post pages remain native. The current SDUI layout's Primary content column, opaque expanded card keys, lazy wrappers and scroll spacers are supported. Sidebars remain visible. Tests reproduce the previous route leak and cover For You, Following, Network, SPA transitions, opaque keys and oversized scroll spacers. Activation requires reloading the extension and refreshing LinkedIn; inspecting the old live page does not activate this update.
+
+## 1.13.0 — Five-minute LinkedIn unlocks
+
+Home starts empty; Show 5m admits the first ten posts for five minutes. My Network recommendations start hidden; its Show 5m admits the first three individual cards for five minutes. Both close on expiry and share their quota across tabs, refreshes and discovery dialogs. The popup footer shows the loaded version so an older running build is easier to identify. Edge was observed still running 1.12.0, which predates the fix for `/feed/foryou/`; reload the extension and refresh LinkedIn to activate the corrected route handling and new limits.

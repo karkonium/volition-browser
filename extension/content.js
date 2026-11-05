@@ -667,7 +667,7 @@
     schedule();
   });
   setInterval(() => {
-    if (state.more.readyAt && Date.now() >= state.more.readyAt) void send({ type: 'GET_STATE' });
+    if ([state.more,...Core.FEATURES.map(key=>state.navigation[key])].some(wait=>wait.readyAt && Date.now()>=wait.readyAt)) void send({type:'GET_STATE'});
     handleRoute(); applyAccess(); schedule();
   }, 500);
 })();

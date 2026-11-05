@@ -2,6 +2,7 @@ const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const Core=require('../extension/core.js');
+fs.mkdirSync(path.resolve(__dirname,'../preview'),{recursive:true});
 const nav='<nav><a href="/">Home</a><a href="/reels/">Reels</a><a href="/explore/">Search</a><a href="/person/followers/">Followers</a><a href="/person/following/">Following</a></nav>';
 function fixture(url){
  const base='<style>body{margin:0}nav{height:40px}article{display:block}</style>'+nav;
@@ -27,8 +28,20 @@ function fixture(url){
   await page.goto('https://www.instagram.com/');await page.waitForFunction(()=>document.querySelectorAll('[data-still-over-limit]').length===15);
   assert.equal(await page.locator('nav a[href="/reels/"]').isVisible(),false);assert.equal(await page.locator('nav a[href="/explore/"]').isVisible(),false);
   await popup.locator('#show-reels').click();await popup.locator('#show-search').click();
+  await popup.waitForFunction(()=>document.querySelector('#show-search .button-label').textContent.startsWith('Wait'));
+  assert.equal(await popup.locator('#show-reels').isEnabled(),false);assert.equal(await popup.locator('#show-search').isEnabled(),false);
+  await popup.waitForTimeout(4500);
+  for(const id of ['show-reels','show-search'])assert.ok(await popup.locator('#'+id).evaluate(button=>{const p=parseFloat(button.style.getPropertyValue('--wait-progress'));return p>20 && p<90}));
+  await popup.screenshot({path:path.resolve(__dirname,'../preview/instagram-wait-progress.png'),fullPage:true});
+  await popup.goto('about:blank');await page.waitForTimeout(6500);
+  assert.equal(await page.locator('nav a[href="/reels/"]').isVisible(),false);assert.equal(await page.locator('nav a[href="/explore/"]').isVisible(),false);
+  await openPopup();
+  await popup.waitForFunction(()=>document.querySelector('#show-reels .button-label').textContent==='Show Reels' && !document.querySelector('#show-reels').disabled && !document.querySelector('#show-search').disabled);
+  assert.equal((await get()).navigation.reels.ready,true);assert.equal((await get()).navigation.explore.ready,true);
+  await popup.screenshot({path:path.resolve(__dirname,'../preview/instagram-ready.png'),fullPage:true});
+  await popup.locator('#show-reels').click();await popup.locator('#show-search').click();
   await page.waitForFunction(()=>document.documentElement.dataset.stillReels==='open'&&document.documentElement.dataset.stillExplore==='open');
-  assert.equal(await page.locator('nav a[href="/reels/"]').isVisible(),true);assert.equal(await page.locator('nav a[href="/explore/"]').isVisible(),true);pass('Show controls reveal only their navigation buttons');
+  assert.equal(await page.locator('nav a[href="/reels/"]').isVisible(),true);assert.equal(await page.locator('nav a[href="/explore/"]').isVisible(),true);pass('Reels and Search show filling waits, stay ready with navigation hidden after popup closure, then reveal only on explicit clicks');
   let s=await get();s.reveals={reels:Date.now()-1,explore:Date.now()-1};await set(s);
   await page.waitForFunction(()=>document.documentElement.dataset.stillReels==='closed');assert.equal(await page.locator('main').isVisible(),true);assert.equal(await page.locator('html[data-still-quiet]').count(),0);pass('expired navigation reveals leave Home and its ten-post batch available');
   for(const name of ['followers','following']){
@@ -146,8 +159,16 @@ function fixture(url){
   await openPopup();await popup.waitForFunction(()=>!document.querySelector('#more-reels').disabled);
   await popup.locator('#more-reels').click();await popup.waitForFunction(()=>document.querySelector('#more-reels').textContent.startsWith('Wait'));
   const pending=await get();assert.equal(pending.more.requests,1);assert.equal(pending.batches.reels.seen.length,10);
-  await popup.goto('about:blank');await page.waitForFunction(()=>document.querySelector('[data-still-ui="status"]')?.dataset.stillViewed==='1',{},{timeout:16000});
-  assert.equal((await get()).batches.reels.generation,1);pass('real first ten-second countdown persists after closing the popup, then renews exactly one batch');
+  await popup.waitForTimeout(4500);
+  assert.ok(await popup.locator('#more-reels').evaluate(button=>{const p=parseFloat(button.style.getPropertyValue('--wait-progress'));return p>20 && p<90}));
+  await popup.screenshot({path:path.resolve(__dirname,'../preview/instagram-more-progress.png'),fullPage:true});
+  await popup.goto('about:blank');await page.waitForTimeout(6500);
+  assert.equal((await get()).batches.reels.generation,0);assert.equal((await get()).batches.reels.seen.length,10);
+  await openPopup();await popup.waitForFunction(()=>document.querySelector('#more-reels .button-label').textContent==='More Reels' && !document.querySelector('#more-reels').disabled);
+  assert.equal((await get()).more.ready,true);assert.equal((await get()).batches.reels.generation,0);
+  await popup.locator('#more-reels').click();
+  await page.waitForFunction(()=>document.querySelector('[data-still-ui="status"]')?.dataset.stillViewed==='1',{},{timeout:16000});
+  assert.equal((await get()).batches.reels.generation,1);pass('More Reels finishes its real ten-second wait without renewing; the ready-button click alone renews one batch');
   await openPopup();await popup.setViewportSize({width:408,height:850});await popup.waitForTimeout(200);fs.mkdirSync(path.resolve(__dirname,'../preview'),{recursive:true});await popup.screenshot({path:path.resolve(__dirname,'../preview/popup.png'),fullPage:true});
   assert.deepEqual(errors,[]);console.log(`\n${checks} Instagram browser checks passed, no JavaScript errors.`);
  }finally{await context.close();fs.rmSync(profile,{recursive:true,force:true})}
